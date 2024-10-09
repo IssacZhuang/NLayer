@@ -4,6 +4,8 @@ namespace NLayer
 {
     public class MpegFile : IDisposable
     {
+        public const float Inv256 = 1.0f / 256.0f;
+
         System.IO.Stream _stream;
         bool _closeStream, _eofFound;
 
@@ -159,24 +161,6 @@ namespace NLayer
         }
 
         /// <summary>
-        /// Read specified samples into provided buffer. Do exactly the same as <see cref="ReadSamples(float[], int, int)"/>
-        /// except that the data is written in type of byte, while still representing single-precision float (in local endian).
-        /// </summary>
-        /// <param name="buffer">Buffer to write. Floating point data will be actually written into this byte array.</param>
-        /// <param name="index">Writing offset on the destination buffer.</param>
-        /// <param name="count">Length of samples to be read, in bytes.</param>
-        /// <returns>Sample size actually reads, in bytes.</returns>
-        public int ReadSamples(byte[] buffer, int index, int count)
-        {
-            if (index < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException("index");
-
-            // make sure we're asking for an even number of samples
-            count -= (count % sizeof(float));
-
-            return ReadSamplesImpl(buffer, index, count, 32);
-        }
-
-        /// <summary>
         /// Read specified samples into provided buffer, as PCM format.
         /// Result varies with diffirent <see cref="StereoMode"/>:
         /// <list type="bullet">
@@ -196,32 +180,22 @@ namespace NLayer
         /// <param name="index">Writing offset on the destination buffer.</param>
         /// <param name="count">Count of samples to be read.</param>
         /// <returns>Sample count actually reads.</returns>
-        public int ReadSamples(float[] buffer, int index, int count)
+        public int ReadSamples(Span<float> buffer, int index, int count)
         {
-            if (index < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException("index");
+            if (index < 0 || index + count > buffer.Length) throw new ArgumentOutOfRangeException(nameof(index));
 
             // ReadSampleImpl "thinks" in bytes, so adjust accordingly
             return ReadSamplesImpl(buffer, index * sizeof(float), count * sizeof(float), 32) / sizeof(float);
         }
 
-        public int ReadSamplesInt16(byte[] buffer, int index, int count)
-        {
-            if (index < 0 || index + count > buffer.Length * sizeof(short)) throw new ArgumentOutOfRangeException("index");
-
-            return ReadSamplesImpl(buffer, index, count, 16) * sizeof(short) / sizeof(float);
-        }
-
-        public int ReadSamplesInt8(byte[] buffer, int index, int count)
-        {
-            if (index < 0 || index + count > buffer.Length * sizeof(float)) throw new ArgumentOutOfRangeException("index");
-
-            return ReadSamplesImpl(buffer, index, count, 8) * sizeof(byte) / sizeof(float);
+        public int ReadSamples(Span<float> buffer){
+            return ReadSamples(buffer, 0, buffer.Length);
         }
 
         float[] _readBuf = new float[1152 * 2];
         int _readBufLen, _readBufOfs;
 
-        int ReadSamplesImpl(Array buffer, int index, int count, int bitDepth)
+        int ReadSamplesImpl(Span<float> buffer, int index, int count, int bitDepth)
         {
             var cnt = 0;
 
@@ -237,7 +211,8 @@ namespace NLayer
                         if (temp > count) temp = count;
                         if (bitDepth == 32)
                         {
-                            Buffer.BlockCopy(_readBuf, _readBufOfs, buffer, index, temp);
+                            //Buffer.BlockCopy(_readBuf, _readBufOfs, buffer, index, temp);
+                            _readBuf.AsSpan(_readBufOfs, temp).CopyTo(buffer.Slice(index, temp));
                         }
                         else
                         {
@@ -246,17 +221,20 @@ namespace NLayer
                                 switch (bitDepth)
                                 {
                                     case 8:
-                                        buffer.SetValue((byte)Math.Round(127.5f * _readBuf[_readBufOfs / sizeof(float) + i] + 127.5f), index / sizeof(float) + i);
+                                        //buffer.SetValue((byte)Math.Round(127.5f * _readBuf[_readBufOfs / sizeof(float) + i] + 127.5f), index / sizeof(float) + i);
+                                        buffer[index / sizeof(float) + i] = MathF.Round(127.5f * _readBuf[_readBufOfs / sizeof(float) + i] + 127.5f);
                                         break;
                                     case 16:
                                         var value = (int)Math.Round(32767.5f * _readBuf[_readBufOfs / sizeof(float) + i] - 0.5f);
                                         if (value < 0) {
                                             value += 65536;
                                         }
-    
-                                        buffer.SetValue((byte)(value % 256), 2 * (index / sizeof(float) + i));
-                                        buffer.SetValue((byte)(value / 256), 2 * (index / sizeof(float) + i) + 1);
-    
+
+                                        //buffer.SetValue((byte)(value % 256), 2 * (index / sizeof(float) + i));
+                                        //buffer.SetValue((byte)(value / 256), 2 * (index / sizeof(float) + i) + 1);
+
+                                        buffer[2 * (index / sizeof(float) + i)] = value % 256;
+                                        buffer[2 * (index / sizeof(float) + i) + 1] = value * Inv256;
                                         break;
                                 }
                             }
