@@ -1,8 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
-    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <TargetFramework>net9.0</TargetFramework>
+    <!-- <GeneratePackageOnBuild>True</GeneratePackageOnBuild> -->
     <Authors>Mark Heath</Authors>
     <Version>1.4.0</Version>
     <PackageLicenseUrl></PackageLicenseUrl>
